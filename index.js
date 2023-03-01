@@ -4,6 +4,13 @@ const path = require("path");
 const ping = require("ping");
 const dns = require("node:dns");
 
+let resolver = dns;
+if (process.env.DNS_RESOLVER) {
+  resolver = new dns.Resolver();
+  console.log(new Date(), "using custom resolver", process.env.DNS_RESOLVER);
+  resolver.setServers([process.env.DNS_RESOLVER]);
+}
+
 let hour = new Date().getHours();
 let isActive = false;
 
@@ -26,7 +33,8 @@ function writeEntry(entry) {
 }
 
 console.log(new Date(), "starting cron for", hostname);
-cron.schedule("* * * * *", () => {
+
+function go() {
   const newHour = new Date().getHours();
   if (hour !== newHour) {
     hour = newHour;
@@ -39,11 +47,12 @@ cron.schedule("* * * * *", () => {
   }
   dns.resolve4(hostname, (err, ip) => {
     if (err) {
+      console.log(new Date(), "IP not found", err.message);
       return;
     }
     ping.sys.probe(ip, function (isAlive) {
       if (!isAlive) {
-        console.log(new Date(), "machine is offline");
+        console.log(new Date(), "machine " + ip + " is offline");
         return;
       }
       console.log(new Date(), "machine is online");
@@ -52,7 +61,9 @@ cron.schedule("* * * * *", () => {
       writeEntry(isActive);
     });
   });
-});
+}
+cron.schedule("* * * * *", go);
+go();
 
 const express = require("express");
 const app = express();
